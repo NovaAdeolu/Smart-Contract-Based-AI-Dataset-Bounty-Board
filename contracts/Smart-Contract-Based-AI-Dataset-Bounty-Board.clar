@@ -8,11 +8,13 @@
 (define-constant err-invalid-vote (err u106))
 (define-constant err-bounty-expired (err u107))
 (define-constant err-bounty-not-active (err u108))
+(define-constant err-low-reputation (err u109))
 
 (define-data-var next-bounty-id uint u1)
 (define-data-var next-submission-id uint u1)
 (define-data-var voting-period uint u1008)
 (define-data-var min-validators uint u3)
+(define-data-var min-reputation uint u50)
 
 (define-map bounties
   { bounty-id: uint }
@@ -43,7 +45,17 @@
 
 (define-map validators
   { validator: principal }
-  { is-active: bool, reputation: uint }
+  { is-active: bool, reputation: uint, total-votes: uint, correct-votes: uint }
+)
+
+(define-map contributor-stats
+  { contributor: principal }
+  { total-submissions: uint, approved-submissions: uint, reputation: uint }
+)
+
+(define-map submission-weights
+  { submission-id: uint }
+  { weighted-yes: uint, weighted-no: uint, total-weight: uint }
 )
 
 (define-map votes
@@ -135,6 +147,20 @@
       { yes-votes: u0, no-votes: u0, total-votes: u0 }
     )
     
+    (map-set submission-weights
+      { submission-id: submission-id }
+      { weighted-yes: u0, weighted-no: u0, total-weight: u0 }
+    )
+    
+    (let
+      ((contributor-data (default-to { total-submissions: u0, approved-submissions: u0, reputation: u100 }
+                                     (map-get? contributor-stats { contributor: tx-sender }))))
+      (map-set contributor-stats
+        { contributor: tx-sender }
+        (merge contributor-data { total-submissions: (+ (get total-submissions contributor-data) u1) })
+      )
+    )
+    
     (var-set next-submission-id (+ submission-id u1))
     (ok submission-id)
   )
@@ -144,7 +170,7 @@
   (begin
     (map-set validators
       { validator: tx-sender }
-      { is-active: true, reputation: u100 }
+      { is-active: true, reputation: u100, total-votes: u0, correct-votes: u0 }
     )
     (ok true)
   )
@@ -161,6 +187,7 @@
       (current-block stacks-block-height)
     )
     (asserts! (get is-active validator-info) err-unauthorized)
+    (asserts! (>= (get reputation validator-info) (var-get min-reputation)) err-low-reputation)
     (asserts! (< current-block (get validation-end submission)) err-bounty-expired)
     (asserts! (is-none (map-get? votes { submission-id: submission-id, validator: tx-sender })) err-already-submitted)
     
@@ -169,22 +196,46 @@
       { vote: vote, voted-at: current-block }
     )
     
-    (if vote
-      (map-set submission-votes
-        { submission-id: submission-id }
-        {
-          yes-votes: (+ (get yes-votes current-votes) u1),
-          no-votes: (get no-votes current-votes),
-          total-votes: (+ (get total-votes current-votes) u1)
-        }
-      )
-      (map-set submission-votes
-        { submission-id: submission-id }
-        {
-          yes-votes: (get yes-votes current-votes),
-          no-votes: (+ (get no-votes current-votes) u1),
-          total-votes: (+ (get total-votes current-votes) u1)
-        }
+    (let
+      ((validator-weight (get reputation validator-info))
+       (current-weights (unwrap! (map-get? submission-weights { submission-id: submission-id }) err-not-found)))
+      (if vote
+        (begin
+          (map-set submission-votes
+            { submission-id: submission-id }
+            {
+              yes-votes: (+ (get yes-votes current-votes) u1),
+              no-votes: (get no-votes current-votes),
+              total-votes: (+ (get total-votes current-votes) u1)
+            }
+          )
+          (map-set submission-weights
+            { submission-id: submission-id }
+            {
+              weighted-yes: (+ (get weighted-yes current-weights) validator-weight),
+              weighted-no: (get weighted-no current-weights),
+              total-weight: (+ (get total-weight current-weights) validator-weight)
+            }
+          )
+        )
+        (begin
+          (map-set submission-votes
+            { submission-id: submission-id }
+            {
+              yes-votes: (get yes-votes current-votes),
+              no-votes: (+ (get no-votes current-votes) u1),
+              total-votes: (+ (get total-votes current-votes) u1)
+            }
+          )
+          (map-set submission-weights
+            { submission-id: submission-id }
+            {
+              weighted-yes: (get weighted-yes current-weights),
+              weighted-no: (+ (get weighted-no current-weights) validator-weight),
+              total-weight: (+ (get total-weight current-weights) validator-weight)
+            }
+          )
+        )
       )
     )
     (ok true)
@@ -202,25 +253,32 @@
     (asserts! (>= current-block (get validation-end submission)) err-invalid-vote)
     (asserts! (>= (get total-votes vote-tally) (var-get min-validators)) err-invalid-vote)
     
-    (if (> (get yes-votes vote-tally) (get no-votes vote-tally))
-      (begin
-        (map-set submissions
-          { submission-id: submission-id }
-          (merge submission { status: "approved" })
+    (let
+      ((weights (unwrap! (map-get? submission-weights { submission-id: submission-id }) err-not-found))
+       (is-approved (> (get weighted-yes weights) (get weighted-no weights)))
+       (validator-update (update-validator-reputations submission-id is-approved)))
+      (if is-approved
+        (let
+          ((transfer-result (try! (as-contract (stx-transfer? (get reward bounty) tx-sender (get contributor submission)))))
+           (contributor-update (update-contributor-reputation (get contributor submission) true)))
+          (map-set submissions
+            { submission-id: submission-id }
+            (merge submission { status: "approved" })
+          )
+          (map-set bounties
+            { bounty-id: (get bounty-id submission) }
+            (merge bounty { status: "completed" })
+          )
+          (ok "approved")
         )
-        (try! (as-contract (stx-transfer? (get reward bounty) tx-sender (get contributor submission))))
-        (map-set bounties
-          { bounty-id: (get bounty-id submission) }
-          (merge bounty { status: "completed" })
+        (let
+          ((contributor-update (update-contributor-reputation (get contributor submission) false)))
+          (map-set submissions
+            { submission-id: submission-id }
+            (merge submission { status: "rejected" })
+          )
+          (ok "rejected")
         )
-        (ok "approved")
-      )
-      (begin
-        (map-set submissions
-          { submission-id: submission-id }
-          (merge submission { status: "rejected" })
-        )
-        (ok "rejected")
       )
     )
   )
@@ -240,6 +298,72 @@
     (map-set bounties
       { bounty-id: bounty-id }
       (merge bounty { status: "cancelled" })
+    )
+    (ok true)
+  )
+)
+
+(define-private (update-validator-reputations (submission-id uint) (final-result bool))
+  (ok true)
+)
+
+(define-public (update-single-validator-reputation (submission-id uint) (validator principal) (final-result bool))
+  (match (map-get? votes { submission-id: submission-id, validator: validator })
+    vote-data 
+    (let
+      ((validator-data (unwrap! (map-get? validators { validator: validator }) err-not-found))
+       (vote-correct (is-eq (get vote vote-data) final-result))
+       (new-total-votes (+ (get total-votes validator-data) u1))
+       (new-correct-votes (if vote-correct
+                            (+ (get correct-votes validator-data) u1)
+                            (get correct-votes validator-data)))
+       (reputation-adjustment (if vote-correct u5 u3))
+       (adjusted-reputation (if vote-correct
+                              (+ (get reputation validator-data) reputation-adjustment)
+                              (- (get reputation validator-data) reputation-adjustment)))
+       (new-reputation (if vote-correct
+                         (if (> adjusted-reputation u200) u200 adjusted-reputation)
+                         (if (< adjusted-reputation u10) u10 adjusted-reputation))))
+      (map-set validators
+        { validator: validator }
+        {
+          is-active: (get is-active validator-data),
+          reputation: new-reputation,
+          total-votes: new-total-votes,
+          correct-votes: new-correct-votes
+        }
+      )
+      (ok true)
+    )
+    (ok false)
+  )
+)
+
+(define-private (update-contributor-reputation (contributor principal) (approved bool))
+  (let
+    ((contributor-data (default-to { total-submissions: u0, approved-submissions: u0, reputation: u100 }
+                                   (map-get? contributor-stats { contributor: contributor })))
+     (new-approved (if approved
+                     (+ (get approved-submissions contributor-data) u1)
+                     (get approved-submissions contributor-data)))
+     (new-total (+ (get total-submissions contributor-data) u1))
+     (success-rate (if (> new-total u0)
+                     (/ (* new-approved u100) new-total)
+                     u100))
+     (reputation-change (if approved u10 u5))
+     (adjusted-reputation (if approved
+                            (+ (get reputation contributor-data) reputation-change)
+                            (- (get reputation contributor-data) reputation-change)))
+     (new-reputation (if approved
+                       (if (> adjusted-reputation u200) u200 adjusted-reputation)
+                       (if (< adjusted-reputation u10) u10 adjusted-reputation))))
+    (map-set contributor-stats
+      { contributor: contributor }
+      {
+        total-submissions: (get total-submissions contributor-data),
+        approved-submissions: new-approved,
+        reputation: new-reputation
+      }
     )
     (ok true)
   )
@@ -275,4 +399,22 @@
 
 (define-read-only (get-next-submission-id)
   (var-get next-submission-id)
+)
+
+(define-read-only (get-contributor-stats (contributor principal))
+  (map-get? contributor-stats { contributor: contributor })
+)
+
+(define-read-only (get-submission-weights (submission-id uint))
+  (map-get? submission-weights { submission-id: submission-id })
+)
+
+(define-read-only (calculate-validator-accuracy (validator principal))
+  (match (map-get? validators { validator: validator })
+    validator-data
+    (if (> (get total-votes validator-data) u0)
+      (some (/ (* (get correct-votes validator-data) u100) (get total-votes validator-data)))
+      (some u100))
+    none
+  )
 )
