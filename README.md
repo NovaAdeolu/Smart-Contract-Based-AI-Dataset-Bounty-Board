@@ -1,4 +1,4 @@
-> 🎯 A decentralized platform for AI researchers to request, fund, and validate datasets through smart contracts
+A decentralized platform for AI researchers to request, fund, and validate datasets through smart contracts
 
 ## 🌟 Overview
 
@@ -187,5 +187,30 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [IPFS Documentation](https://docs.ipfs.io/)
 
 ---
+
+## 🕒 New Feature: Extend Bounty Deadline
+
+This feature allows bounty creators to extend the deadline of their active bounties, providing flexibility when initial timelines prove insufficient for attracting quality submissions.
+
+### Usage Example
+
+```clarity
+(contract-call? .Smart-Contract-Based-AI-Dataset-Bounty-Board extend-bounty-deadline
+  u1  ;; bounty-id
+  u2500)  ;; new deadline (block height)
+```
+
+### Function Details
+
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `extend-bounty-deadline` | 🕒 Extend deadline for active bounty | bounty-id, new-deadline |
+
+### Key Benefits
+
+- 🔄 **Dynamic Adjustments**: Enable real-time timeline modifications without bounty recreation
+- 💡 **Enhanced UX**: Improve creator satisfaction with flexible bounty management
+- ⚡ **Efficiency Gains**: Reduce gas costs and operational overhead
+- 🔒 **Secure Access**: Creator-only authorization with strict validation checks
 
 Built with ❤️ for the AI research community

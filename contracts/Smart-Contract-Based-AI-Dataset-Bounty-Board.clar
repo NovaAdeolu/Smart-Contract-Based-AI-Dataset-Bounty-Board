@@ -292,12 +292,30 @@
     )
     (asserts! (is-eq tx-sender (get creator bounty)) err-unauthorized)
     (asserts! (is-eq (get status bounty) "active") err-bounty-not-active)
-    
+
     (try! (as-contract (stx-transfer? (get amount funds) tx-sender (get creator bounty))))
-    
+
     (map-set bounties
       { bounty-id: bounty-id }
       (merge bounty { status: "cancelled" })
+    )
+    (ok true)
+  )
+)
+
+(define-public (extend-bounty-deadline (bounty-id uint) (new-deadline uint))
+  (let
+    (
+      (bounty (unwrap! (map-get? bounties { bounty-id: bounty-id }) err-not-found))
+      (current-block stacks-block-height)
+    )
+    (asserts! (is-eq tx-sender (get creator bounty)) err-unauthorized)
+    (asserts! (is-eq (get status bounty) "active") err-bounty-not-active)
+    (asserts! (> new-deadline (get deadline bounty)) err-invalid-bounty)
+
+    (map-set bounties
+      { bounty-id: bounty-id }
+      (merge bounty { deadline: new-deadline })
     )
     (ok true)
   )
