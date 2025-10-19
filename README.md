@@ -213,4 +213,34 @@ This feature allows bounty creators to extend the deadline of their active bount
 - ⚡ **Efficiency Gains**: Reduce gas costs and operational overhead
 - 🔒 **Secure Access**: Creator-only authorization with strict validation checks
 
+## 🛡️ New Feature: Contributor Reputation Gate
+
+Introducing a reputation-based submission gate that elevates dataset quality by restricting contributions to experienced participants. This mechanism ensures only contributors with proven track records can submit datasets, fostering a high-trust ecosystem.
+
+### Usage Example
+
+Contributors must maintain a minimum reputation score to participate:
+
+```clarity
+;; Automatic reputation check during submission
+(contract-call? .Smart-Contract-Based-AI-Dataset-Bounty-Board submit-dataset
+  u1  ;; bounty-id
+  "QmYourIPFSHashHere123456789"
+  u12000)  ;; sample count
+;; Fails if contributor reputation < min-contributor-reputation
+```
+
+### Function Details
+
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `submit-dataset` | 📊 Submit dataset with reputation check | bounty-id, ipfs-hash, sample-count |
+
+### Key Benefits
+
+- 🛡️ **Quality Assurance**: Filter out low-quality submissions through reputation thresholds
+- 🌟 **Incentive Alignment**: Reward consistent high performers with submission privileges
+- 📈 **Ecosystem Growth**: Encourage skill development and community expertise
+- ⚖️ **Fair Access**: Balance openness with quality control mechanisms
+
 Built with ❤️ for the AI research community

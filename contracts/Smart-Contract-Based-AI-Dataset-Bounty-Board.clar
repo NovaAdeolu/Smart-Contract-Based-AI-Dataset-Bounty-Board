@@ -9,12 +9,14 @@
 (define-constant err-bounty-expired (err u107))
 (define-constant err-bounty-not-active (err u108))
 (define-constant err-low-reputation (err u109))
+(define-constant err-low-contributor-rep (err u110))
 
 (define-data-var next-bounty-id uint u1)
 (define-data-var next-submission-id uint u1)
 (define-data-var voting-period uint u1008)
 (define-data-var min-validators uint u3)
 (define-data-var min-reputation uint u50)
+(define-data-var min-contributor-reputation uint u50)
 
 (define-map bounties
   { bounty-id: uint }
@@ -123,10 +125,12 @@
       (submission-id (var-get next-submission-id))
       (current-block stacks-block-height)
       (bounty (unwrap! (map-get? bounties { bounty-id: bounty-id }) err-not-found))
+      (contributor-rep (default-to u100 (get reputation (map-get? contributor-stats { contributor: tx-sender }))))
     )
     (asserts! (is-eq (get status bounty) "active") err-bounty-not-active)
     (asserts! (< current-block (get deadline bounty)) err-bounty-expired)
     (asserts! (>= sample-count (get required-samples bounty)) err-invalid-bounty)
+    (asserts! (>= contributor-rep (var-get min-contributor-reputation)) err-low-contributor-rep)
     (asserts! (is-none (map-get? submissions { submission-id: submission-id })) err-already-submitted)
     
     (map-set submissions
