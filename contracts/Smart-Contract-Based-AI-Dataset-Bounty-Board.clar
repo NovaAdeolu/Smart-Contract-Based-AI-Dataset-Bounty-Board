@@ -308,22 +308,47 @@
 )
 
 (define-public (extend-bounty-deadline (bounty-id uint) (new-deadline uint))
-  (let
-    (
-      (bounty (unwrap! (map-get? bounties { bounty-id: bounty-id }) err-not-found))
-      (current-block stacks-block-height)
-    )
-    (asserts! (is-eq tx-sender (get creator bounty)) err-unauthorized)
-    (asserts! (is-eq (get status bounty) "active") err-bounty-not-active)
-    (asserts! (> new-deadline (get deadline bounty)) err-invalid-bounty)
+   (let
+     (
+       (bounty (unwrap! (map-get? bounties { bounty-id: bounty-id }) err-not-found))
+       (current-block stacks-block-height)
+     )
+     (asserts! (is-eq tx-sender (get creator bounty)) err-unauthorized)
+     (asserts! (is-eq (get status bounty) "active") err-bounty-not-active)
+     (asserts! (> new-deadline (get deadline bounty)) err-invalid-bounty)
 
-    (map-set bounties
-      { bounty-id: bounty-id }
-      (merge bounty { deadline: new-deadline })
-    )
-    (ok true)
-  )
-)
+     (map-set bounties
+       { bounty-id: bounty-id }
+       (merge bounty { deadline: new-deadline })
+     )
+     (ok true)
+   )
+ )
+
+(define-public (increase-bounty-reward (bounty-id uint) (additional-amount uint))
+   (let
+     (
+       (bounty (unwrap! (map-get? bounties { bounty-id: bounty-id }) err-not-found))
+       (current-funds (unwrap! (map-get? bounty-funds { bounty-id: bounty-id }) err-not-found))
+     )
+     (asserts! (is-eq tx-sender (get creator bounty)) err-unauthorized)
+     (asserts! (is-eq (get status bounty) "active") err-bounty-not-active)
+     (asserts! (> additional-amount u0) err-invalid-bounty)
+
+     (try! (stx-transfer? additional-amount tx-sender (as-contract tx-sender)))
+
+     (map-set bounties
+       { bounty-id: bounty-id }
+       (merge bounty { reward: (+ (get reward bounty) additional-amount) })
+     )
+
+     (map-set bounty-funds
+       { bounty-id: bounty-id }
+       { amount: (+ (get amount current-funds) additional-amount) }
+     )
+     (ok true)
+   )
+ )
 
 (define-private (update-validator-reputations (submission-id uint) (final-result bool))
   (ok true)

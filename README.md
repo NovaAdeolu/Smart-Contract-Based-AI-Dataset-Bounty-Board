@@ -242,5 +242,31 @@ Contributors must maintain a minimum reputation score to participate:
 - 🌟 **Incentive Alignment**: Reward consistent high performers with submission privileges
 - 📈 **Ecosystem Growth**: Encourage skill development and community expertise
 - ⚖️ **Fair Access**: Balance openness with quality control mechanisms
+## 💰 New Feature: Increase Bounty Reward
+
+This feature empowers bounty creators to dynamically boost their bounties' appeal by adding extra STX rewards, attracting more high-quality submissions and fostering vibrant competition in the dataset collection ecosystem.
+
+### Usage Example
+
+```clarity
+(contract-call? .Smart-Contract-Based-AI-Dataset-Bounty-Board increase-bounty-reward
+  u1  ;; bounty-id
+  u500000)  ;; additional amount in microSTX
+```
+
+### Function Details
+
+| Function | Description | Parameters |
+|----------|-------------|------------|
+| `increase-bounty-reward` | 💰 Boost bounty reward for active bounties | bounty-id, additional-amount |
+
+### Key Benefits
+
+- 🚀 **Enhanced Attractiveness**: Instantly elevate bounty visibility with increased incentives
+- 💡 **Adaptive Strategy**: Enable real-time reward adjustments based on market dynamics
+- ⚡ **Seamless Integration**: Maintain existing bounty structure while amplifying rewards
+- 🔒 **Creator Control**: Exclusive authorization ensuring secure fund management
+
+Built with ❤️ for the AI research community
 
 Built with ❤️ for the AI research community
