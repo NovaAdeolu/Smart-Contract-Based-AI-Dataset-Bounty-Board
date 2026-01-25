@@ -17,6 +17,10 @@
 (define-data-var min-validators uint u3)
 (define-data-var min-reputation uint u50)
 (define-data-var min-contributor-reputation uint u50)
+(define-data-var total-bounties uint u0)
+(define-data-var active-bounties uint u0)
+(define-data-var total-submissions uint u0)
+(define-data-var total-validators uint u0)
 
 (define-map bounties
   { bounty-id: uint }
@@ -28,7 +32,8 @@
     deadline: uint,
     required-samples: uint,
     status: (string-ascii 16),
-    created-at: uint
+    created-at: uint,
+    category: (string-ascii 32)
   }
 )
 
@@ -75,12 +80,13 @@
   { amount: uint }
 )
 
-(define-public (create-bounty 
+(define-public (create-bounty
   (title (string-ascii 128))
   (description (string-ascii 512))
   (required-samples uint)
   (deadline uint)
-  (reward uint))
+  (reward uint)
+  (category (string-ascii 32)))
   (let
     (
       (bounty-id (var-get next-bounty-id))
@@ -102,7 +108,8 @@
         deadline: deadline,
         required-samples: required-samples,
         status: "active",
-        created-at: current-block
+        created-at: current-block,
+        category: category
       }
     )
     
@@ -112,6 +119,8 @@
     )
     
     (var-set next-bounty-id (+ bounty-id u1))
+    (var-set total-bounties (+ (var-get total-bounties) u1))
+    (var-set active-bounties (+ (var-get active-bounties) u1))
     (ok bounty-id)
   )
 )
@@ -131,7 +140,6 @@
     (asserts! (< current-block (get deadline bounty)) err-bounty-expired)
     (asserts! (>= sample-count (get required-samples bounty)) err-invalid-bounty)
     (asserts! (>= contributor-rep (var-get min-contributor-reputation)) err-low-contributor-rep)
-    (asserts! (is-none (map-get? submissions { submission-id: submission-id })) err-already-submitted)
     
     (map-set submissions
       { submission-id: submission-id }
@@ -166,6 +174,7 @@
     )
     
     (var-set next-submission-id (+ submission-id u1))
+    (var-set total-submissions (+ (var-get total-submissions) u1))
     (ok submission-id)
   )
 )
@@ -176,6 +185,7 @@
       { validator: tx-sender }
       { is-active: true, reputation: u100, total-votes: u0, correct-votes: u0 }
     )
+    (var-set total-validators (+ (var-get total-validators) u1))
     (ok true)
   )
 )
@@ -273,6 +283,7 @@
             { bounty-id: (get bounty-id submission) }
             (merge bounty { status: "completed" })
           )
+          (var-set active-bounties (- (var-get active-bounties) u1))
           (ok "approved")
         )
         (let
@@ -303,6 +314,7 @@
       { bounty-id: bounty-id }
       (merge bounty { status: "cancelled" })
     )
+    (var-set active-bounties (- (var-get active-bounties) u1))
     (ok true)
   )
 )
@@ -393,7 +405,7 @@
      (new-approved (if approved
                      (+ (get approved-submissions contributor-data) u1)
                      (get approved-submissions contributor-data)))
-     (new-total (+ (get total-submissions contributor-data) u1))
+     (new-total (get total-submissions contributor-data))
      (success-rate (if (> new-total u0)
                      (/ (* new-approved u100) new-total)
                      u100))
@@ -407,7 +419,7 @@
     (map-set contributor-stats
       { contributor: contributor }
       {
-        total-submissions: (get total-submissions contributor-data),
+        total-submissions: new-total,
         approved-submissions: new-approved,
         reputation: new-reputation
       }
@@ -464,4 +476,24 @@
       (some u100))
     none
   )
+)
+(define-read-only (get-total-bounties)
+  (var-get total-bounties)
+)
+(define-read-only (get-active-bounties-count)
+  (var-get active-bounties)
+)
+(define-read-only (get-total-submissions)
+  (var-get total-submissions)
+)
+(define-read-only (get-total-validators)
+  (var-get total-validators)
+)
+(define-read-only (get-platform-stats)
+  {
+    total-bounties: (var-get total-bounties),
+    active-bounties: (var-get active-bounties),
+    total-submissions: (var-get total-submissions),
+    total-validators: (var-get total-validators)
+  }
 )
